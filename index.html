@@ -1,0 +1,877 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>九九撲克牌</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --panel2:#1f2937;
+      --text:#e5e7eb; --muted:#94a3b8;
+      --accent:#38bdf8; --good:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+      --card:#f8fafc; --cardText:#111827;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0%, var(--bg) 45%);
+      color:var(--text);
+    }
+    .wrap{
+      max-width:1400px; margin:0 auto; padding:16px;
+      display:grid; grid-template-columns: 340px 1fr; gap:16px; min-height:100vh;
+    }
+    .panel{
+      background: rgba(17,24,39,.92);
+      border:1px solid rgba(148,163,184,.2);
+      border-radius:18px; padding:16px;
+      box-shadow:0 14px 40px rgba(0,0,0,.28);
+    }
+    h1,h2,h3,p{margin-top:0}
+    .actions{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+    button{
+      border:0; border-radius:12px; padding:10px 14px;
+      font-weight:800; cursor:pointer; background:#334155; color:white;
+    }
+    button.primary{background:#0284c7}
+    button.good{background:#16a34a}
+    button.warn{background:#d97706}
+    button.danger{background:#dc2626}
+    button:disabled{opacity:.45; cursor:not-allowed}
+    .legend{font-size:13px; color:var(--muted); line-height:1.6}
+    .pill{display:inline-block; padding:3px 8px; border-radius:999px; background:#1e293b; margin:2px 4px 2px 0;}
+    .winner{
+      background: rgba(34,197,94,.12);
+      border:1px solid rgba(34,197,94,.4);
+      border-radius:14px; padding:12px; margin-bottom:12px;
+    }
+
+    /* ===== Board layout (4 人圍桌) ===== */
+    .board{
+      display:grid;
+      grid-template-columns: 1fr 1.25fr 1fr;
+      grid-template-rows: auto 1fr auto;
+      gap:12px;
+      align-items:stretch;
+    }
+    .seat, .center, .you-panel{
+      background: rgba(31,41,55,.92);
+      border-radius:16px;
+      padding:12px;
+      border:1px solid rgba(148,163,184,.16);
+    }
+    .seat.eliminated{opacity:.55; filter:grayscale(.7)}
+    .seat.active{outline:2px solid rgba(56,189,248,.9)}
+    .seat h3{margin:0 0 6px 0}
+    .badges{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+    .badge{padding:4px 8px; border-radius:999px; font-size:12px; background:#334155; color:#e2e8f0}
+    .badge.turn{background:#0369a1}
+    .badge.human{background:#166534}
+    .badge.bot{background:#6b21a8}
+    .badge.out{background:#991b1b}
+
+    .seat-top{grid-column:2; grid-row:1;}
+    .seat-left{grid-column:1; grid-row:2;}
+    .center{grid-column:2; grid-row:2; display:grid; gap:10px;}
+    .seat-right{grid-column:3; grid-row:2;}
+    .you-panel{grid-column:2; grid-row:3;}
+
+    .top-stats{
+      display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px;
+    }
+    .stat{
+      background: rgba(17,24,39,.55);
+      border:1px solid rgba(148,163,184,.12);
+      border-radius:14px; padding:10px;
+      min-height:84px;
+    }
+    .stat .value{font-size:1.9rem; font-weight:900; line-height:1; margin:8px 0 4px 0;}
+    .sea-cards{min-height:128px; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start; padding-top:6px;}
+    .center-row{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:10px;
+      align-items:start;
+    }
+    .deckbox{
+      display:flex; flex-direction:column; gap:8px; align-items:center; justify-content:flex-start;
+      min-width:120px;
+      background: rgba(17,24,39,.55);
+      border:1px solid rgba(148,163,184,.12);
+      border-radius:14px; padding:10px;
+    }
+
+    /* ===== Cards ===== */
+    .smallcards, .hand{ display:flex; flex-direction:row; flex-wrap:nowrap; gap:10px; overflow-x:auto; padding:10px;}
+    .card{
+      width:64px; height:92px; border-radius:12px;
+      border:2px solid #cbd5e1;
+      background: linear-gradient(180deg,#fff,#e2e8f0);
+      color:var(--cardText);
+      display:flex; flex-direction:column; justify-content:space-between;
+      padding:6px; font-weight:900;
+      box-shadow:0 8px 16px rgba(0,0,0,.18);
+      user-select:none;
+    }
+    .card.red{color:#b91c1c}
+    .card.back{
+      background: linear-gradient(135deg,#1d4ed8,#0f172a);
+      border-color:#60a5fa; color:white; justify-content:center; align-items:center; font-size:1.1rem;
+    }
+    .card .corner{font-size:1rem}
+    .card .center{align-self:center; font-size:1.45rem; margin-top:-8px}
+    .card.small{width:42px; height:60px; font-size:11px; padding:4px}
+    .card.small .center{font-size:1rem; margin-top:-4px}
+    .card.playable{cursor:pointer; transition:transform .12s, box-shadow .12s}
+    .card.playable:hover{transform: translateY(-4px)}
+    .card.selected{outline:3px solid var(--good); transform: translateY(-6px)}
+    .info-line{font-size:14px; color:var(--muted); min-height:22px; margin-bottom:8px}
+    .option-list,.target-list{display:flex; flex-wrap:wrap; gap:8px; margin:8px 0}
+    .you-grid{
+      display:grid;
+      grid-template-columns: 340px 1fr;
+      gap:12px;
+      align-items:start;
+    }
+    .you-actions{
+      background: rgba(17,24,39,.55);
+      border:1px solid rgba(148,163,184,.12);
+      border-radius:14px; padding:10px;
+    }
+    .you-hand{
+      background: rgba(17,24,39,.55);
+      border:1px solid rgba(148,163,184,.12);
+      border-radius:14px; padding:10px;
+    }
+
+    .log{
+      margin-top:12px;
+      background: rgba(31,41,55,.92);
+      border-radius:16px;
+      padding:12px;
+      border:1px solid rgba(148,163,184,.16);
+      max-height:320px;
+      overflow:auto;
+      font-size:14px;
+      line-height:1.45;
+    }
+    .log-entry{padding:8px 10px; border-bottom:1px solid rgba(148,163,184,.12)}
+
+    @media (max-width: 1100px){
+      .wrap{grid-template-columns: 1fr;}
+      .you-grid{grid-template-columns: 1fr;}
+      .board{grid-template-columns: 1fr; grid-template-rows: auto auto auto auto auto;}
+      .seat-top,.center,.you-panel,.seat-left,.seat-right{grid-column:1;}
+      .seat-top{grid-row:1}
+      .center{grid-row:2}
+      .seat-left{grid-row:3}
+      .seat-right{grid-row:4}
+      .you-panel{grid-row:5}
+      .top-stats{grid-template-columns: 1fr 1fr;}
+    }
+    @media (max-width: 640px){
+      .top-stats{grid-template-columns: 1fr;}
+      .card{width:54px; height:80px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="panel">
+      <h1>九九撲克牌</h1>
+      <div id="winnerBox"></div>
+      <div class="actions">
+        <button class="primary" id="newGameBtn">新遊戲</button>
+        <button id="toggleRuleBtn">顯示 / 隱藏規則</button>
+      </div>
+      <div id="rulePanel" class="legend">
+        <p><span class="pill">目標</span>讓別人被迫使海中數值超過 99 而淘汰，活到最後即勝利。</p>
+        <p><span class="pill">一般流程</span>輪到玩家時可出「一張或多張」牌；多張牌的點數先相加，再依總和觸發效果。出牌後通常從山抽 1 張。</p>
+        <p><span class="pill">淘汰</span>出任何牌都會超過 99、手牌被抽到 0、或交換後變成 0 張。</p>
+        <p><span class="pill">特殊點數</span>A=1, J=11(自己跳過下一輪), Q=12(±20), K=13(到99)。</p>
+        <p><span class="pill">7</span>抽任一玩家 1 張牌，再額外從牌堆抽 1 張，總共會補兩張。</p>
+        <p><span class="pill">9</span>出牌後，剩餘手牌與任一玩家交換。</p>
+        <p><span class="pill">10</span>可 +10 或 -10；<span class="pill">Q</span>可 +20 或 -20；<span class="pill">K</span>直接設為 99。</p>
+      </div>
+      <h3 style="margin-top:16px;">操作提示</h3>
+      <div class="legend">
+        點手牌可多選（不限 2 張）；若組合後點數為 7 / 9 / 10 / J / Q / K，系統會要求你選目標或功能。<br><br>
+        Bot 會依照你提供的優先順序行動。
+      </div>
+    </aside>
+
+    <main class="panel">
+      <section class="board">
+        <div id="seatTop" class="seat seat-top"></div>
+        <div id="seatLeft" class="seat seat-left"></div>
+
+        <div class="center">
+          <div class="top-stats">
+            <div class="stat">
+              <div>海中數值</div>
+              <div class="value" id="seaValue">0</div>
+              <div class="legend">超過 99 即淘汰</div>
+            </div>
+            <div class="stat">
+              <div>山牌剩餘</div>
+              <div class="value" id="deckCount">0</div>
+              <div class="legend">抽完會把海牌重洗成山</div>
+            </div>
+            <div class="stat">
+              <div>目前回合</div>
+              <div class="value" id="turnLabel">-</div>
+              <div class="legend" id="statusLine">準備開始</div>
+            </div>
+          </div>
+
+          <div class="legend" id="lastPlayText">尚未出牌</div>
+
+          <div class="center-row">
+            <div>
+              <h3 style="margin:0 0 8px 0;">海 / 出牌區</h3>
+              <div class="sea-cards" id="seaCards"></div>
+            </div>
+
+            <div class="deckbox">
+              <h3 style="margin:0;">牌堆</h3>
+              <div id="deckBack"></div>
+              <div class="legend" style="text-align:center;">抽牌會自動補到 5 張<br>（7 會補 2 張）</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="seatRight" class="seat seat-right"></div>
+
+        <div class="you-panel">
+          <div id="youInfo"></div>
+
+          <div class="you-grid">
+            <div class="you-actions">
+              <h3 style="margin:0 0 8px 0;">你的操作（含手牌）</h3>
+              <div class="info-line" id="playerHint">請先開始新遊戲</div>
+
+              <div class="option-list" id="effectOptions"></div>
+              <div class="target-list" id="targetOptions"></div>
+
+              <div class="actions">
+                <button class="good" id="playBtn">出牌</button>
+                <button class="warn" id="clearBtn">清除選牌</button>
+              </div>
+
+              <div class="legend" id="selectionDesc">尚未選擇任何手牌。</div>
+            </div>
+
+            <div class="you-hand">
+              <h3 style="margin:0 0 8px 0;">你的手牌</h3>
+              <div class="hand" id="handArea"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="log" id="logArea"></section>
+    </main>
+  </div>
+
+<script>
+const SUITS = ["♠","♥","♦","♣"];
+const RED_SUITS = new Set(["♥","♦"]);
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const BOT_DELAY = 650;
+
+const state = {
+  players: [],
+  deck: [],
+  seaPile: [],
+  seaValue: 0,
+  currentPlayer: 0,
+  lastPlay: null,
+  selectedHand: [],
+  pendingEffectChoice: null,
+  pendingTarget: null,
+  gameOver: false,
+  log: [],
+  rulesOpen: true,
+};
+
+const el = (id) => document.getElementById(id);
+
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function makeDeck(){
+  const deck=[];
+  for(const suit of SUITS){
+    for(const rank of RANKS){
+      deck.push({id:`${rank}${suit}-${Math.random().toString(36).slice(2,9)}`, suit, rank});
+    }
+  }
+  return shuffle(deck);
+}
+
+function rankValue(rank){
+  if(rank==="A") return 1;
+  if(rank==="J") return 11;
+  if(rank==="Q") return 12;
+  if(rank==="K") return 13;
+  return Number(rank);
+}
+
+function comboValue(cards){ return cards.reduce((s,c)=>s+rankValue(c.rank),0); }
+
+function effectType(total){
+  if(total>=1 && total<=6) return {kind:"add", delta: total, text:`+${total}`};
+  if(total===7) return {kind:"steal", text:"抽任一玩家 1 張"};
+  if(total===8) return {kind:"add", delta: 8, text:"+8"};
+  if(total===9) return {kind:"swap", text:"與任一玩家交換手牌"};
+  if(total===10) return {kind:"plusminus10", text:"+10 或 -10"};
+  if(total===11) return {kind:"noop", text:"跳過此回合"};
+  if(total===12) return {kind:"plusminus20", text:"+20 或 -20"};
+  if(total===13) return {kind:"to99", text:"加至 99"};
+  return {kind:"add", delta: total, text:`+${total}`};
+}
+
+function effectNeedsTarget(kind){ return kind==="steal" || kind==="swap"; }
+function effectNeedsChoice(kind){ return kind==="plusminus10" || kind==="plusminus20"; }
+
+function getAlivePlayers(){ return state.players.filter(p=>!p.eliminated); }
+
+function nextAliveIndex(from){
+  const n=state.players.length;
+  let idx=from;
+  for(let step=0; step<n; step++){
+    idx=(idx+1)%n;
+    if(!state.players[idx].eliminated) return idx;
+  }
+  return from;
+}
+
+function log(msg){ state.log.unshift(msg); render(); }
+
+function cardLabel(card){ return `${card.rank}${card.suit}`; }
+
+function cardHtml(card, opts={}){
+  const div=document.createElement("div");
+  div.className = `card ${RED_SUITS.has(card.suit)?"red":""} ${opts.small?"small":""} ${opts.playable?"playable":""} ${opts.selected?"selected":""}`.trim();
+  div.innerHTML = `<div class="corner">${card.rank}${card.suit}</div><div class="center">${card.rank}</div><div class="corner" style="align-self:flex-end">${card.suit}</div>`;
+  return div;
+}
+
+function backCardHtml(small=false){
+  const div=document.createElement("div");
+  div.className = `card back ${small?"small":""}`;
+  div.textContent="🂠";
+  return div;
+}
+
+function ensureDeckForDraw(){
+  if(state.deck.length>0) return;
+  if(state.seaPile.length===0) return;
+  const recycled=[...state.seaPile];
+  state.seaPile=[];
+  state.deck=shuffle(recycled);
+  log("山牌抽完，將海中的牌全部重洗成新的山牌，海中數值保留不變。");
+}
+
+function drawOne(player){
+  ensureDeckForDraw();
+  if(state.deck.length>0) player.hand.push(state.deck.pop());
+}
+
+function eliminatePlayer(player, reason){
+  if(player.eliminated) return;
+  player.eliminated=true;
+  player.hand=[];
+  log(`💥 ${player.name} 淘汰：${reason}`);
+  checkWinner();
+}
+
+function checkWinner(){
+  const alive=getAlivePlayers();
+  if(alive.length<=1){
+    state.gameOver=true;
+    if(alive.length===1) log(`🏆 ${alive[0].name} 獲勝！`);
+    else log("所有玩家都淘汰，無人獲勝。");
+    render();
+    return true;
+  }
+  return false;
+}
+
+function allSubsets(hand){
+  const n=hand.length;
+  const subsets=[];
+  for(let mask=1; mask<(1<<n); mask++){
+    const cards=[];
+    for(let i=0;i<n;i++) if(mask&(1<<i)) cards.push(hand[i]);
+    subsets.push(cards);
+  }
+  subsets.sort((a,b)=>a.length-b.length);
+  return subsets;
+}
+
+function wouldSurviveEffect(current, eff, choice=null){
+  if(eff.kind==="add") return current+eff.delta<=99;
+  if(eff.kind==="to99") return true;
+  if(eff.kind==="noop") return true;
+  if(eff.kind==="steal") return true;
+  if(eff.kind==="swap") return true;
+  if(eff.kind==="plusminus10"){
+    if(choice==="+10") return current+10<=99;
+    if(choice==="-10") return true;
+    return (current+10<=99) || true;
+  }
+  if(eff.kind==="plusminus20"){
+    if(choice==="+20") return current+20<=99;
+    if(choice==="-20") return true;
+    return (current+20<=99) || true;
+  }
+  return current<=99;
+}
+
+function applySeaEffect(actor, eff, choice){
+  if(eff.kind==="add") state.seaValue += eff.delta;
+  else if(eff.kind==="plusminus10") state.seaValue += (choice==="-10" ? -10 : 10);
+  else if(eff.kind==="plusminus20") state.seaValue += (choice==="-20" ? -20 : 20);
+  else if(eff.kind==="to99") state.seaValue = 99;
+  else if(eff.kind==="noop"){ }
+  state.seaValue = Math.max(0, state.seaValue);
+}
+
+function advanceToNext(fromId){
+  let next = nextAliveIndex(fromId);
+  for(let guard=0; guard<state.players.length; guard++){
+    const p = state.players[next];
+    if(!p || p.eliminated) { next = nextAliveIndex(next); continue; }
+    if(p.skipNext){
+      p.skipNext=false;
+      log(`⏭ ${p.name} 因為「自己跳過下一輪」而跳過本回合。`);
+      next = nextAliveIndex(next);
+      continue;
+    }
+    break;
+  }
+  state.currentPlayer = next;
+}
+
+function playCards(player, cardIds, choice=null, targetId=null){
+  if(state.gameOver) return false;
+
+  const cards = cardIds.map(id=>player.hand.find(c=>c.id===id)).filter(Boolean);
+  if(cards.length!==cardIds.length || cards.length===0) return false;
+
+  const total = comboValue(cards);
+  const eff = effectType(total);
+
+  if(effectNeedsChoice(eff.kind) && !choice) return false;
+  if(effectNeedsTarget(eff.kind) && (targetId===null || targetId===undefined)) return false;
+
+  if(!wouldSurviveEffect(state.seaValue, eff, choice)){
+    eliminatePlayer(player, "出牌後海中數值會超過 99");
+    finishTurn(player.id);
+    return true;
+  }
+
+  for(const card of cards){
+    const idx=player.hand.findIndex(c=>c.id===card.id);
+    if(idx>=0) player.hand.splice(idx,1);
+  }
+
+  state.seaPile.push(...cards);
+  state.lastPlay = { player: player.name, cards: cards.map(cardLabel), effect: eff.text, choice, targetId };
+  let extra="";
+
+  applySeaEffect(player, eff, choice);
+
+  if(eff.kind==="steal"){
+    const target=state.players[targetId];
+    if(target && !target.eliminated){
+      if(target.hand.length===0){
+        eliminatePlayer(target,"被抽牌時已無手牌");
+      }else{
+        const stolenIdx=Math.floor(Math.random()*target.hand.length);
+        const [stolen]=target.hand.splice(stolenIdx,1);
+        player.hand.push(stolen);
+        extra = `，抽取了 ${target.name} 的 1 張手牌`;
+        if(target.hand.length===0) eliminatePlayer(target,"手牌被抽至 0 張");
+      }
+    }
+  }else if(eff.kind==="swap"){
+    const target=state.players[targetId];
+    if(target && !target.eliminated){
+      const myHand=[...player.hand];
+      const theirHand=[...target.hand];
+      player.hand=theirHand;
+      target.hand=myHand;
+      extra = `，與 ${target.name} 交換剩餘手牌`;
+      if(player.hand.length===0) eliminatePlayer(player,"交換後變成無手牌");
+      if(target.hand.length===0) eliminatePlayer(target,"交換後變成無手牌");
+    }
+  }
+
+  log(`▶ ${player.name} 出牌：${cards.map(cardLabel).join(" + ")}（總和 ${total} → ${eff.text}${choice?` ${choice}`:""}${extra}）`);
+
+  if(!player.eliminated) drawOne(player);
+  if(eff.kind==="steal" && !player.eliminated) drawOne(player);
+
+  finishTurn(player.id);
+  return true;
+}
+
+function finishTurn(playerId){
+  if(checkWinner()) return;
+  state.selectedHand=[];
+  state.pendingEffectChoice=null;
+  state.pendingTarget=null;
+  advanceToNext(playerId);
+  render();
+  maybeBotTurn();
+}
+
+function getTargetCandidates(actorId, mode){
+  return state.players.filter(p=>p.id!==actorId && !p.eliminated && (mode!=="steal" || p.hand.length>0));
+}
+
+function pickMostCardsPlayer(excludeId){
+  return state.players
+    .filter(p=>p.id!==excludeId && !p.eliminated)
+    .sort((a,b)=>b.hand.length-a.hand.length || a.id-b.id)[0] || null;
+}
+
+function pickLeastCardsPlayer(excludeId, requireHasCards=false){
+  return state.players
+    .filter(p=>p.id!==excludeId && !p.eliminated && (!requireHasCards || p.hand.length>0))
+    .sort((a,b)=>a.hand.length-b.hand.length || a.id-b.id)[0] || null;
+}
+
+function chooseBotMove(bot){
+  const subsets = allSubsets(bot.hand);
+
+  const valid = subsets.map(cards=>{
+    const total=comboValue(cards);
+    const eff=effectType(total);
+    let choice=null;
+    if(eff.kind==="plusminus10") choice = (state.seaValue+10<=99) ? "+10" : "-10";
+    if(eff.kind==="plusminus20") choice = (state.seaValue+20<=99) ? "+20" : "-20";
+    return {cards, total, eff, choice, survivable: wouldSurviveEffect(state.seaValue, eff, choice)};
+  }).filter(x=>x.survivable);
+
+  if(valid.length===0) return null;
+
+  const remainingAfter = (move) => bot.hand.filter(c=>!move.cards.some(m=>m.id===c.id));
+
+  // 1
+  for(const move of valid.filter(v=>v.total===9)){
+    const rem = remainingAfter(move);
+    if((bot.hand.length===1 && bot.hand[0].rank==="9") || (rem.length===1 && rem[0]?.rank==="9")){
+      return {...move, target: pickMostCardsPlayer(bot.id)};
+    }
+  }
+
+  // 2
+  {
+    const sevens = valid.filter(v=>v.total===7).sort((a,b)=>a.cards.length-b.cards.length);
+    if(sevens.length) return {...sevens[0], target: pickLeastCardsPlayer(bot.id, true)};
+  }
+
+  // 3
+  {
+    const funcs = valid.filter(v=>[10,11,12,13].includes(v.total)).sort((a,b)=>a.cards.length-b.cards.length);
+    if(funcs.length) return {...funcs[0], target: pickLeastCardsPlayer(bot.id, true)};
+  }
+
+  // 4
+  {
+    const nines = valid.filter(v=>v.total===9).sort((a,b)=>a.cards.length-b.cards.length);
+    if(nines.length) return {...nines[0], target: pickMostCardsPlayer(bot.id)};
+  }
+
+  // 5
+  valid.sort((a,b)=> b.total-a.total || a.cards.length-b.cards.length);
+  return {...valid[0], target: null};
+}
+
+function canAnyPlayWithoutBurst(player){
+  const subsets = allSubsets(player.hand);
+  for(const cards of subsets){
+    const total=comboValue(cards);
+    const eff=effectType(total);
+    const choice = eff.kind==="plusminus10" ? ((state.seaValue+10<=99)?"+10":"-10")
+                : eff.kind==="plusminus20" ? ((state.seaValue+20<=99)?"+20":"-20")
+                : null;
+    if(wouldSurviveEffect(state.seaValue, eff, choice)) return true;
+  }
+  return false;
+}
+
+function maybeBotTurn(){
+  if(state.gameOver) return;
+  const player = state.players[state.currentPlayer];
+  if(!player || player.eliminated || !player.isBot) return;
+
+  setTimeout(()=>{
+    if(state.gameOver || state.currentPlayer!==player.id) return;
+
+    if(!canAnyPlayWithoutBurst(player)){
+      eliminatePlayer(player,"無法出任何不會讓海中數值超過 99 的牌");
+      finishTurn(player.id);
+      return;
+    }
+
+    const move = chooseBotMove(player);
+    if(!move){
+      eliminatePlayer(player,"無法出任何不會讓海中數值超過 99 的牌");
+      finishTurn(player.id);
+      return;
+    }
+
+    playCards(player, move.cards.map(c=>c.id), move.choice, move.target?.id ?? null);
+  }, BOT_DELAY);
+}
+
+function selectionEffectInfo(){
+  const player=state.players[0];
+  const cards = state.selectedHand.map(id=>player.hand.find(c=>c.id===id)).filter(Boolean);
+  if(!cards.length) return null;
+  const total=comboValue(cards);
+  const eff=effectType(total);
+  return {cards, total, eff};
+}
+
+function toggleSelect(cardId){
+  if(state.gameOver) return;
+  if(state.currentPlayer!==0) return;
+  const idx=state.selectedHand.indexOf(cardId);
+  if(idx>=0) state.selectedHand.splice(idx,1);
+  else state.selectedHand.push(cardId);
+  state.pendingEffectChoice=null;
+  state.pendingTarget=null;
+  render();
+}
+
+function playHuman(){
+  if(state.currentPlayer!==0 || state.gameOver) return;
+  const player=state.players[0];
+  if(!state.selectedHand.length) return;
+  const info=selectionEffectInfo();
+  if(!info) return;
+
+  const {eff}=info;
+  const defaultChoice = eff.kind==="plusminus10" ? ((state.seaValue+10<=99)?"+10":"-10")
+                    : eff.kind==="plusminus20" ? ((state.seaValue+20<=99)?"+20":"-20")
+                    : null;
+
+  const choice = effectNeedsChoice(eff.kind) ? (state.pendingEffectChoice || defaultChoice) : null;
+  const target = effectNeedsTarget(eff.kind) ? state.pendingTarget : null;
+
+  if(effectNeedsTarget(eff.kind) && (target===null || target===undefined)) return;
+  if(effectNeedsChoice(eff.kind) && !choice) return;
+
+  playCards(player, [...state.selectedHand], choice, target);
+}
+
+function renderSeat(containerId, player){
+  const box = el(containerId);
+  const active = (!player.eliminated && state.currentPlayer===player.id);
+  box.className = `seat ${containerId==='seatTop'?'seat-top':containerId==='seatLeft'?'seat-left':containerId==='seatRight'?'seat-right':''} ${active?'active':''} ${player.eliminated?'eliminated':''}`.trim();
+
+  const badges=[];
+  if(active) badges.push('<span class="badge turn">目前回合</span>');
+  badges.push(`<span class="badge ${player.isBot?'bot':'human'}">${player.isBot?'Bot':'玩家'}</span>`);
+  if(player.eliminated) badges.push('<span class="badge out">已淘汰</span>');
+  if(player.skipNext && !player.eliminated) badges.push('<span class="badge">下輪跳過</span>');
+
+  box.innerHTML = `
+    <h3>${player.name}</h3>
+    <div class="badges">${badges.join('')}</div>
+    <div class="legend">手牌數：${player.hand.length}</div>
+  `;
+
+  const cardWrap=document.createElement('div');
+  cardWrap.className='smallcards';
+  for(let i=0;i<player.hand.length;i++) cardWrap.appendChild(backCardHtml(true));
+  box.appendChild(cardWrap);
+}
+
+function renderYouInfo(){
+  const you = state.players[0];
+  const node = el('youInfo');
+  if(!you){ node.innerHTML=""; return; }
+  const active = (!you.eliminated && state.currentPlayer===0);
+  const badges=[];
+  if(active) badges.push('<span class="badge turn">目前回合</span>');
+  badges.push('<span class="badge human">玩家</span>');
+  if(you.eliminated) badges.push('<span class="badge out">已淘汰</span>');
+  if(you.skipNext && !you.eliminated) badges.push('<span class="badge">下輪跳過</span>');
+  node.innerHTML = `<h3 style="margin:0 0 8px 0;">你的狀態</h3>
+    <div class="badges">${badges.join('')}</div>
+    <div class="legend">手牌數：${you.hand.length}</div>`;
+}
+
+function renderSea(){
+  el('seaValue').textContent = state.seaValue;
+  el('deckCount').textContent = state.deck.length;
+  el('turnLabel').textContent = state.players[state.currentPlayer]?.name ?? '-';
+
+  const sea = el('seaCards');
+  sea.innerHTML='';
+  const recent = state.seaPile.slice(-12);
+  for(const c of recent) sea.appendChild(cardHtml(c));
+
+  el('lastPlayText').textContent = state.lastPlay
+    ? `${state.lastPlay.player}：${state.lastPlay.cards.join(' + ')} → ${state.lastPlay.effect}${state.lastPlay.choice?` ${state.lastPlay.choice}`:''}`
+    : '尚未出牌';
+
+  const deckBack = el('deckBack');
+  deckBack.innerHTML='';
+  deckBack.appendChild(backCardHtml(false));
+}
+
+function renderHand(){
+  const hand=el('handArea');
+  hand.innerHTML='';
+  const player=state.players[0];
+  for(const c of player.hand){
+    const selected = state.selectedHand.includes(c.id);
+    const node = cardHtml(c,{playable:true, selected});
+    node.addEventListener('click',()=>toggleSelect(c.id));
+    hand.appendChild(node);
+  }
+}
+
+function renderControls(){
+  const info = selectionEffectInfo();
+  const playerHint = el('playerHint');
+  const selectionDesc = el('selectionDesc');
+  const effectOptions = el('effectOptions');
+  const targetOptions = el('targetOptions');
+  effectOptions.innerHTML='';
+  targetOptions.innerHTML='';
+
+  const myTurn = state.currentPlayer===0 && !state.gameOver && !state.players[0].eliminated;
+  el('playBtn').disabled = !myTurn || state.selectedHand.length===0;
+  el('clearBtn').disabled = state.selectedHand.length===0;
+
+  if(state.gameOver) playerHint.textContent = "遊戲結束。";
+  else if(!myTurn) playerHint.textContent = "目前不是你的回合。";
+  else playerHint.textContent = "選擇 1 張或多張牌出牌。";
+
+  if(!info){
+    selectionDesc.textContent="尚未選擇任何手牌。";
+    return;
+  }
+
+  const {total, eff} = info;
+  const defaultChoice = eff.kind==="plusminus10" ? ((state.seaValue+10<=99)?"+10":"-10")
+                    : eff.kind==="plusminus20" ? ((state.seaValue+20<=99)?"+20":"-20")
+                    : null;
+
+  selectionDesc.textContent = `已選 ${info.cards.map(cardLabel).join(' + ')}，總和 ${total}，效果：${eff.text}`;
+
+  if(!wouldSurviveEffect(state.seaValue, eff, state.pendingEffectChoice || defaultChoice)){
+    selectionDesc.textContent += "（此出牌會讓你淘汰）";
+  }
+
+  if(effectNeedsChoice(eff.kind)){
+    const choices = eff.kind==="plusminus10" ? ["+10","-10"] : ["+20","-20"];
+    for(const c of choices){
+      const b=document.createElement('button');
+      b.textContent=c;
+      if((state.pendingEffectChoice || defaultChoice)===c) b.classList.add('primary');
+      if((c==="+10" && state.seaValue+10>99) || (c==="+20" && state.seaValue+20>99)) b.disabled=true;
+      b.addEventListener('click',()=>{ state.pendingEffectChoice=c; render(); });
+      effectOptions.appendChild(b);
+    }
+  }
+
+  if(effectNeedsTarget(eff.kind)){
+    const candidates = getTargetCandidates(0, eff.kind);
+    for(const target of candidates){
+      const b=document.createElement('button');
+      b.textContent = `${target.name}（${target.hand.length} 張）`;
+      if(state.pendingTarget===target.id) b.classList.add('primary');
+      b.addEventListener('click',()=>{ state.pendingTarget=target.id; render(); });
+      targetOptions.appendChild(b);
+    }
+  }
+}
+
+function renderLog(){
+  const area=el('logArea');
+  area.innerHTML = state.log.map(x=>`<div class="log-entry">${x}</div>`).join('');
+}
+
+function renderWinner(){
+  const box=el('winnerBox');
+  if(!state.gameOver){ box.innerHTML=""; return; }
+  const alive=getAlivePlayers();
+  box.innerHTML = `<div class="winner"><strong>${alive[0]?`🏆 勝利者：${alive[0].name}`:"無勝利者"}</strong>
+    <div class="legend" style="margin-top:8px;">按下「新遊戲」可立即再玩一局。</div></div>`;
+}
+
+function render(){
+  renderWinner();
+
+  if(state.players.length){
+    renderSeat('seatTop', state.players[1]);
+    renderSeat('seatLeft', state.players[2]);
+    renderSeat('seatRight', state.players[3]);
+    renderYouInfo();
+  }else{
+    el('seatTop').innerHTML="";
+    el('seatLeft').innerHTML="";
+    el('seatRight').innerHTML="";
+    el('youInfo').innerHTML="";
+  }
+
+  renderSea();
+  renderHand();
+  renderControls();
+  renderLog();
+
+  el('statusLine').textContent = state.gameOver ? "遊戲結束" : `${state.players[state.currentPlayer]?.name ?? '-'} 行動中`;
+  el('rulePanel').style.display = state.rulesOpen ? "block" : "none";
+}
+
+function initGame(){
+  state.players = [
+    { id:0, name:"你", isBot:false, hand:[], eliminated:false, skipNext:false },
+    { id:1, name:"Bot A", isBot:true, hand:[], eliminated:false, skipNext:false },
+    { id:2, name:"Bot B", isBot:true, hand:[], eliminated:false, skipNext:false },
+    { id:3, name:"Bot C", isBot:true, hand:[], eliminated:false, skipNext:false },
+  ];
+  state.deck = makeDeck();
+  state.seaPile = [];
+  state.seaValue = 0;
+  state.currentPlayer = 0;
+  state.lastPlay = null;
+  state.selectedHand = [];
+  state.pendingEffectChoice = null;
+  state.pendingTarget = null;
+  state.gameOver = false;
+  state.log = [];
+
+  for(let r=0;r<5;r++) for(const p of state.players) p.hand.push(state.deck.pop());
+
+  log("新遊戲開始。每位玩家獲得 5 張牌。海中數值為 0。");
+  render();
+  maybeBotTurn();
+}
+
+el('newGameBtn').addEventListener('click', initGame);
+el('toggleRuleBtn').addEventListener('click', ()=>{ state.rulesOpen=!state.rulesOpen; render(); });
+el('playBtn').addEventListener('click', playHuman);
+el('clearBtn').addEventListener('click', ()=>{ state.selectedHand=[]; state.pendingEffectChoice=null; state.pendingTarget=null; render(); });
+
+render();
+</script>
+</body>
+</html>
