@@ -57,6 +57,7 @@
       align-items:stretch;
     }
     .seat, .center, .you-panel{
+      min-width: 0;
       background: rgba(31,41,55,.92);
       border-radius:16px;
       padding:12px;
@@ -104,11 +105,28 @@
     }
 
     /* ===== Cards ===== */
-    .smallcards, .hand{ display:flex; flex-direction:row; flex-wrap:nowrap; gap:10px; overflow-x:auto; padding:10px;}
+    .smallcards{
+      display:grid;
+      grid-template-columns: repeat(8, 42px);
+      gap:8px;
+      justify-content:start;
+      width: calc(8 * 42px + 7 * 8px);
+      max-width: 100%;
+      overflow:hidden;
+    }
+    .hand{
+      display:grid;
+      grid-template-columns: repeat(8, 64px);
+      gap:8px;
+      justify-content:start;
+      width: calc(8 * 64px + 7 * 8px);
+      max-width: 100%;
+      overflow:hidden;
+    }
     .card{
       width:64px; height:92px; border-radius:12px;
       border:2px solid #cbd5e1;
-      background: linear-gradient(180deg,#fff,#e2e8f0);
+      background: #ffffff;
       color:var(--cardText);
       display:flex; flex-direction:column; justify-content:space-between;
       padding:6px; font-weight:900;
@@ -120,10 +138,10 @@
       background: linear-gradient(135deg,#1d4ed8,#0f172a);
       border-color:#60a5fa; color:white; justify-content:center; align-items:center; font-size:1.1rem;
     }
-    .card .corner{font-size:1rem}
-    .card .center{align-self:center; font-size:1.45rem; margin-top:-8px}
+    .card .card-corner{font-size:1rem}
+    .card .card-center{align-self:center; font-size:1.45rem; margin-top:-8px}
     .card.small{width:42px; height:60px; font-size:11px; padding:4px}
-    .card.small .center{font-size:1rem; margin-top:-4px}
+    .card.small .card-center{font-size:1rem; margin-top:-4px}
     .card.playable{cursor:pointer; transition:transform .12s, box-shadow .12s}
     .card.playable:hover{transform: translateY(-4px)}
     .card.selected{outline:3px solid var(--good); transform: translateY(-6px)}
@@ -144,7 +162,9 @@
       background: rgba(17,24,39,.55);
       border:1px solid rgba(148,163,184,.12);
       border-radius:14px; padding:10px;
+      overflow-x:auto;
     }
+    .smallcards-wrap{overflow-x:auto;}
 
     .log{
       margin-top:12px;
@@ -190,8 +210,8 @@
         <p><span class="pill">目標</span>讓別人被迫使海中數值超過 99 而淘汰，活到最後即勝利。</p>
         <p><span class="pill">一般流程</span>輪到玩家時可出「一張或多張」牌；多張牌的點數先相加，再依總和觸發效果。出牌後通常從山抽 1 張。</p>
         <p><span class="pill">淘汰</span>出任何牌都會超過 99、手牌被抽到 0、或交換後變成 0 張。</p>
-        <p><span class="pill">特殊點數</span>A=1, J=11(自己跳過下一輪), Q=12(±20), K=13(到99)。</p>
-        <p><span class="pill">7</span>抽任一玩家 1 張牌，再額外從牌堆抽 1 張，總共會補兩張。</p>
+        <p><span class="pill">特殊點數</span>A=1, J=11（跳過此回合，NOOP）, Q=12(±20), K=13(到99)。</p>
+        <p><span class="pill">7</span>抽任一玩家 1 張牌；出牌後照常只補 1 張。</p>
         <p><span class="pill">9</span>出牌後，剩餘手牌與任一玩家交換。</p>
         <p><span class="pill">10</span>可 +10 或 -10；<span class="pill">Q</span>可 +20 或 -20；<span class="pill">K</span>直接設為 99。</p>
       </div>
@@ -237,7 +257,7 @@
             <div class="deckbox">
               <h3 style="margin:0;">牌堆</h3>
               <div id="deckBack"></div>
-              <div class="legend" style="text-align:center;">抽牌會自動補到 5 張<br>（7 會補 2 張）</div>
+              <div class="legend" style="text-align:center;">出牌後通常補 1 張<br>山牌抽完會重洗海牌</div>
             </div>
           </div>
         </div>
@@ -361,7 +381,7 @@ function cardLabel(card){ return `${card.rank}${card.suit}`; }
 function cardHtml(card, opts={}){
   const div=document.createElement("div");
   div.className = `card ${RED_SUITS.has(card.suit)?"red":""} ${opts.small?"small":""} ${opts.playable?"playable":""} ${opts.selected?"selected":""}`.trim();
-  div.innerHTML = `<div class="corner">${card.rank}${card.suit}</div><div class="center">${card.rank}</div><div class="corner" style="align-self:flex-end">${card.suit}</div>`;
+  div.innerHTML = `<div class="card-corner">${card.rank}${card.suit}</div><div class="card-center">${card.rank}</div><div class="card-corner" style="align-self:flex-end">${card.suit}</div>`;
   return div;
 }
 
@@ -442,7 +462,7 @@ function applySeaEffect(actor, eff, choice){
   else if(eff.kind==="plusminus10") state.seaValue += (choice==="-10" ? -10 : 10);
   else if(eff.kind==="plusminus20") state.seaValue += (choice==="-20" ? -20 : 20);
   else if(eff.kind==="to99") state.seaValue = 99;
-  else if(eff.kind==="noop"){ }
+  else if(eff.kind==="noop") { /* J：NOOP，不影響下回合 */ }
   state.seaValue = Math.max(0, state.seaValue);
 }
 
@@ -520,7 +540,6 @@ function playCards(player, cardIds, choice=null, targetId=null){
   log(`▶ ${player.name} 出牌：${cards.map(cardLabel).join(" + ")}（總和 ${total} → ${eff.text}${choice?` ${choice}`:""}${extra}）`);
 
   if(!player.eliminated) drawOne(player);
-  if(eff.kind==="steal" && !player.eliminated) drawOne(player);
 
   finishTurn(player.id);
   return true;
@@ -687,7 +706,6 @@ function renderSeat(containerId, player){
   if(active) badges.push('<span class="badge turn">目前回合</span>');
   badges.push(`<span class="badge ${player.isBot?'bot':'human'}">${player.isBot?'Bot':'玩家'}</span>`);
   if(player.eliminated) badges.push('<span class="badge out">已淘汰</span>');
-  if(player.skipNext && !player.eliminated) badges.push('<span class="badge">下輪跳過</span>');
 
   box.innerHTML = `
     <h3>${player.name}</h3>
@@ -695,10 +713,13 @@ function renderSeat(containerId, player){
     <div class="legend">手牌數：${player.hand.length}</div>
   `;
 
+  const wrap=document.createElement('div');
+  wrap.className='smallcards-wrap';
   const cardWrap=document.createElement('div');
   cardWrap.className='smallcards';
   for(let i=0;i<player.hand.length;i++) cardWrap.appendChild(backCardHtml(true));
-  box.appendChild(cardWrap);
+  wrap.appendChild(cardWrap);
+  box.appendChild(wrap);
 }
 
 function renderYouInfo(){
@@ -710,7 +731,6 @@ function renderYouInfo(){
   if(active) badges.push('<span class="badge turn">目前回合</span>');
   badges.push('<span class="badge human">玩家</span>');
   if(you.eliminated) badges.push('<span class="badge out">已淘汰</span>');
-  if(you.skipNext && !you.eliminated) badges.push('<span class="badge">下輪跳過</span>');
   node.innerHTML = `<h3 style="margin:0 0 8px 0;">你的狀態</h3>
     <div class="badges">${badges.join('')}</div>
     <div class="legend">手牌數：${you.hand.length}</div>`;
@@ -843,10 +863,10 @@ function render(){
 
 function initGame(){
   state.players = [
-    { id:0, name:"你", isBot:false, hand:[], eliminated:false, skipNext:false },
-    { id:1, name:"Bot A", isBot:true, hand:[], eliminated:false, skipNext:false },
-    { id:2, name:"Bot B", isBot:true, hand:[], eliminated:false, skipNext:false },
-    { id:3, name:"Bot C", isBot:true, hand:[], eliminated:false, skipNext:false },
+    { id:0, name:"你", isBot:false, hand:[], eliminated:false },
+    { id:1, name:"Bot A", isBot:true, hand:[], eliminated:false },
+    { id:2, name:"Bot B", isBot:true, hand:[], eliminated:false },
+    { id:3, name:"Bot C", isBot:true, hand:[], eliminated:false },
   ];
   state.deck = makeDeck();
   state.seaPile = [];
